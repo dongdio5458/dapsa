@@ -222,37 +222,54 @@
     });
     kids.push(table([1500, 8138], ovRows));
 
-    /* ================= 2. 후보지별 검토 ================= */
-    var cands = (data.candidates || []).filter(function (c) { return c && (c.name || has(c.location) || has(c.pros) || has(c.cons)); });
+    /* ================= 사진 칸 (후보지·기타 사진 공용) ================= */
+    var HALF = 4819, num = 0;
+    var band = function (t, w, span) {
+      return cell([para(t, { align: A.CENTER, keepNext: true, run: { bold: true, color: "FFFFFF" } })], { width: w, span: span, fill: NAVY, margins: [40, 110] });
+    };
+    var photoCell = function (p, span) {
+      if (!p) return cell([para("")], { width: HALF, span: span, margins: [60, 110] });
+      num += 1;
+      // 가로 사진은 310×232(4:3) 칸에 꽉 차게, 세로 사진은 높이에 맞춰 전체가 보이게
+      var pw = 310, ph = 232;
+      if (p.w && p.h && p.h > p.w) { pw = Math.round(232 * p.w / p.h); }
+      return cell([
+        new P({ alignment: A.CENTER, spacing: { after: 40 }, children: [image(p.data, pw, ph)] }),
+        para("사진 " + num + (p.caption ? ". " + p.caption : ""), { align: A.CENTER, run: { size: 17 } }),
+      ], { width: HALF, span: span, margins: [60, 110] });
+    };
+
+    /* ================= 2. 후보지별 검토 — 후보지마다 설명 + 사진을 한 덩어리로 ================= */
+    var cands = (data.candidates || []).filter(function (c) { return c && (c.name || has(c.location) || has(c.pros) || has(c.cons) || (c.photos || []).some(function (p) { return p && p.data; })); });
     function candLabel(c, i) { return c.label || (i + 1) + "안"; }
     if (cands.length) {
       sec(cands.length > 1 ? "후보지별 검토" : "현장 검토");
       if (data.candidateSummary) kids.push(para(data.candidateSummary, { spacing: { after: 80 }, run: { size: 18 } }));
-      var hdr = ["구분", "위치·환경", "장점", "고려사항"], cw = [1250, 2350, 2700, 3338];
-      var rows = [new D.TableRow({
-        tableHeader: true,
-        children: hdr.map(function (h, i) {
-          return cell([para(h, { align: A.CENTER, run: { bold: true, color: "FFFFFF" } })], { width: cw[i], fill: NAVY });
-        }),
-      })];
+      // 표 칸: [항목 1500 | 내용 3319 | 내용 4819] — 설명 줄은 항목+내용(2칸 합침), 사진 줄은 반반(4819씩)
+      var CW = [1500, 3319, 4819];
       cands.forEach(function (c, i) {
-        var small = { size: 18 };
-        var bul = function (v) { var ls = lines(v); return ls.length ? ls.map(function (t) { return para(t, { bullet: true, run: small }); }) : [para("")]; };
-        var plain = function (v) { var ls = lines(v); return ls.length ? ls.map(function (t) { return para(t, { run: small }); }) : [para("")]; };
-        rows.push(new D.TableRow({
-          cantSplit: true,
-          children: [
-            cell([
-              para(candLabel(c, i), { align: A.CENTER, run: { bold: true, color: NAVY } }),
-              para((c.name || "") + (c.planned ? "(예정)" : ""), { align: A.CENTER, run: small }),
-            ], { width: cw[0], fill: LIGHT }),
-            cell(plain(c.location), { width: cw[1] }),
-            cell(bul(c.pros), { width: cw[2] }),
-            cell(bul(c.cons), { width: cw[3] }),
-          ],
-        }));
+        var rows = [];
+        var head = candLabel(c, i) + " – " + (c.name || "") + (c.planned ? "(예정)" : "");
+        rows.push(new D.TableRow({ cantSplit: true, children: [band(head, FULL, 3)] }));
+        [["위치·환경", c.location, false], ["장점", c.pros, true], ["고려사항", c.cons, true]].forEach(function (r) {
+          var ls = lines(r[1]);
+          if (!ls.length) return;
+          rows.push(new D.TableRow({
+            cantSplit: true,
+            // keepNext: 설명 줄이 다음 줄(첫 사진 줄)과 같은 페이지에 오도록
+            children: [
+              cell([para(r[0], { align: A.CENTER, keepNext: true, run: { bold: true } })], { width: CW[0], fill: LIGHT }),
+              cell(ls.map(function (t) { return para(t, { bullet: r[2], keepNext: true }); }), { width: CW[1] + CW[2], span: 2 }),
+            ],
+          }));
+        });
+        var ph = (c.photos || []).filter(function (p) { return p && p.data; });
+        for (var k = 0; k < ph.length; k += 2) {
+          rows.push(new D.TableRow({ cantSplit: true, children: [photoCell(ph[k], 2), photoCell(ph[k + 1])] }));
+        }
+        kids.push(table(CW, rows));
+        kids.push(new P({ spacing: { after: 120 }, children: [] }));
       });
-      kids.push(table(cw, rows));
     }
 
     /* ================= 기술 검토 사항 ================= */
@@ -287,49 +304,13 @@
       kids.push(table([FULL], mrows));
     }
 
-    /* ================= 현장 사진 ================= */
-    var groups = [];
-    cands.forEach(function (c, i) {
-      var ph = (c.photos || []).filter(function (p) { return p && p.data; });
-      if (!ph.length) return;
-      var lab = candLabel(c, i) + (c.planned ? "(예정)" : "");
-      groups.push({ title: lab + " – " + (c.photoTitle || c.name || ""), photos: ph });
-    });
+    /* ================= 기타 현장 사진 (후보지 사진은 각 후보지 칸에 들어감) ================= */
     var extra = (data.extraPhotos || []).filter(function (p) { return p && p.data; });
-    if (extra.length) groups.push({ title: data.extraPhotoTitle || "기타 현장 사진", photos: extra });
-
-    if (groups.length) {
+    if (extra.length) {
       sec("현장 사진", { noLine: true });
-      var HALF = 4819, num = 0, prow = [];
-      var band = function (t, w, span) {
-        return cell([para(t, { align: A.CENTER, keepNext: true, run: { bold: true, color: "FFFFFF" } })], { width: w, span: span, fill: NAVY, margins: [40, 110] });
-      };
-      var photoCell = function (p) {
-        if (!p) return cell([para("")], { width: HALF, margins: [60, 110] });
-        num += 1;
-        // 가로 사진은 310×232(4:3) 칸에 꽉 차게, 세로 사진은 높이에 맞춰 전체가 보이게
-        var pw = 310, ph = 232;
-        if (p.w && p.h && p.h > p.w) { pw = Math.round(232 * p.w / p.h); }
-        return cell([
-          new P({ alignment: A.CENTER, spacing: { after: 40 }, children: [image(p.data, pw, ph)] }),
-          para("사진 " + num + ". " + (p.caption || ""), { align: A.CENTER, run: { size: 17 } }),
-        ], { width: HALF, margins: [60, 110] });
-      };
-      var i = 0;
-      while (i < groups.length) {
-        var g = groups[i], nx = groups[i + 1];
-        if (g.photos.length === 1 && nx && nx.photos.length === 1) {
-          // 사진 1장짜리 후보지 두 곳은 한 줄에 나란히
-          prow.push(new D.TableRow({ cantSplit: true, children: [band(g.title, HALF), band(nx.title, HALF)] }));
-          prow.push(new D.TableRow({ cantSplit: true, children: [photoCell(g.photos[0]), photoCell(nx.photos[0])] }));
-          i += 2;
-          continue;
-        }
-        prow.push(new D.TableRow({ cantSplit: true, children: [band(g.title, FULL, 2)] }));
-        for (var k = 0; k < g.photos.length; k += 2) {
-          prow.push(new D.TableRow({ cantSplit: true, children: [photoCell(g.photos[k]), photoCell(g.photos[k + 1])] }));
-        }
-        i += 1;
+      var prow = [new D.TableRow({ cantSplit: true, children: [band(data.extraPhotoTitle || "기타 현장 사진", FULL, 2)] })];
+      for (var e = 0; e < extra.length; e += 2) {
+        prow.push(new D.TableRow({ cantSplit: true, children: [photoCell(extra[e]), photoCell(extra[e + 1])] }));
       }
       kids.push(table([HALF, HALF], prow));
     }

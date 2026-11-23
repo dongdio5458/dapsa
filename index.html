@@ -200,7 +200,7 @@ var TECH = [
   ["기타", "예: 식사 제공 안 됨\n송출 립싱크(딜레이) 확인용 클립 필요"]
 ];
 /* 화면에 보이는 버전 — 폰이 최신 파일을 받았는지 확인용 (올릴 때마다 올림) */
-var APP_VERSION="2026.11.23-7";
+var APP_VERSION="2026.11.23-8";
 var FORMS = ["생방송","녹화","SNG"];
 var NETS = ["KT망","LG망","MNG망"];
 var TIMES = ["오전","오후","종일"];
@@ -434,7 +434,7 @@ function render(){
       field("위치·환경",ta(k+".location","예: 정문 앞 교차로 안전지대\n실외 · 도로변",2))+
       field("장점",ta(k+".pros","예: 회사 로고 배경, 상징성 높음\n출입 승인 부담 적음",3))+
       field("고려사항",ta(k+".cons","예: **중계차 진입 불가** → 케이블 포설 검토\n차량 소음",3),"강조할 글자는 선택 후 [강조]")+
-      field("사진 제목줄",inp(k+".photoTitle",c.name||"예: SK하이닉스 정문"),"보고서 사진 칸 위 제목")+
+      '<div class="sub-h" style="margin:4px 0 0"><b style="font-size:14px">사진</b><span class="sp"></span><span class="note" style="margin:0">보고서에서 이 후보지 설명 바로 밑에 들어가요</span></div>'+
       photoGrid(c.photos,k+".photos")+
       '<button type="button" class="btn ghost" data-addphoto="'+i+'">+ 사진 추가 (카메라·갤러리)</button></div>';
   });

@@ -83,7 +83,11 @@
     ".rp .pic{height:174pt;display:flex;align-items:center;justify-content:center;margin-bottom:2pt}",
     ".rp .pic img{max-width:100%;max-height:100%;display:block}",
     ".rp .cap{font-size:8.5pt}",
-    ".rp .dg img{max-width:100%;max-height:200mm;display:block;margin:0 auto}"
+    ".rp .dg img{max-width:100%;max-height:200mm;display:block;margin:0 auto}",
+    ".rp .cblk{margin-bottom:8pt}",
+    ".rp .cinfo{border-top:0}",
+    ".rp .cinfo tr:first-child th,.rp .cinfo tr:first-child td{border-top:0}",
+    ".rp .cblk .blk>.row2:first-child{margin-top:-.5pt}"
   ].join("\n");
 
   /**
@@ -133,18 +137,38 @@
       return body ? "<tr><th>" + r[0] + "</th><td>" + body + "</td></tr>" : "";
     }).join("") + "</table>");
 
-    /* 후보지 */
-    var cands = (data.candidates || []).filter(function (c) { return c && (c.name || has(c.location) || has(c.pros) || has(c.cons)); });
+    /* 사진 칸 (후보지·기타 사진 공용) — 설명이 없으면 "사진 N"만 */
+    var num = 0;
+    var cell = function (p) {
+      if (!p) return '<div><div class="cellp"><div class="pic"></div><div class="cap">&nbsp;</div></div></div>';
+      num += 1;
+      return '<div><div class="cellp"><div class="pic"><img src="' + p.data + '" alt=""></div><div class="cap">사진 ' + num + (p.caption ? ". " + esc(p.caption) : "") + "</div></div></div>";
+    };
+    var photoRows = function (list) {
+      var out = [];
+      for (var k = 0; k < list.length; k += 2) out.push('<div class="blk"><div class="row2">' + cell(list[k]) + cell(list[k + 1]) + "</div></div>");
+      return out.join("");
+    };
+
+    /* 후보지 — 후보지마다 설명 + 사진을 한 덩어리로 (워드와 같음) */
+    var cands = (data.candidates || []).filter(function (c) { return c && (c.name || has(c.location) || has(c.pros) || has(c.cons) || (c.photos || []).some(function (p) { return p && p.data; })); });
     function lab(c, i) { return c.label || (i + 1) + "안"; }
     if (cands.length) {
       sec(cands.length > 1 ? "후보지별 검토" : "현장 검토");
       if (data.candidateSummary) h.push('<p class="summary">' + rich(data.candidateSummary) + "</p>");
-      h.push('<table class="cand"><colgroup><col style="width:13%"><col style="width:24.4%"><col style="width:28%"><col style="width:34.6%"></colgroup>' +
-        "<thead><tr><th>구분</th><th>위치·환경</th><th>장점</th><th>고려사항</th></tr></thead><tbody>" +
-        cands.map(function (c, i) {
-          return '<tr><td class="lab"><b>' + esc(lab(c, i)) + "</b>" + esc((c.name || "") + (c.planned ? "(예정)" : "")) + "</td>" +
-            "<td>" + ps(c.location) + "</td><td>" + ul(c.pros) + "</td><td>" + ul(c.cons) + "</td></tr>";
-        }).join("") + "</tbody></table>");
+      cands.forEach(function (c, i) {
+        var rowsHtml = [["위치·환경", c.location, false], ["장점", c.pros, true], ["고려사항", c.cons, true]].map(function (r) {
+          if (!has(r[1])) return "";
+          return "<tr><th>" + r[0] + "</th><td>" + (r[2] ? ul(r[1]) : ps(r[1])) + "</td></tr>";
+        }).join("");
+        var ph = (c.photos || []).filter(function (p) { return p && p.data; });
+        var head = esc(lab(c, i) + " – " + (c.name || "") + (c.planned ? "(예정)" : ""));
+        // 제목줄 + 설명 + 첫 사진 줄은 한 덩어리 (페이지에서 갈라지지 않게)
+        var first = ph.length ? '<div class="row2">' + cell(ph[0]) + cell(ph[1]) + "</div>" : "";
+        h.push('<div class="cblk"><div class="blk"><div class="band">' + head + "</div>" +
+          (rowsHtml ? '<table class="ov cinfo">' + rowsHtml + "</table>" : "") + first + "</div>" +
+          photoRows(ph.slice(2)) + "</div>");
+      });
     }
 
     /* 기술 검토 사항 */
@@ -166,37 +190,11 @@
       });
     }
 
-    /* 현장 사진 — 워드와 같은 묶음 규칙 (사진 1장짜리 후보지 2곳은 나란히) */
-    var groups = [];
-    cands.forEach(function (c, i) {
-      var ph = (c.photos || []).filter(function (p) { return p && p.data; });
-      if (ph.length) groups.push({ title: lab(c, i) + (c.planned ? "(예정)" : "") + " – " + (c.photoTitle || c.name || ""), photos: ph });
-    });
+    /* 기타 현장 사진 (후보지 사진은 각 후보지 칸에 들어감) */
     var extra = (data.extraPhotos || []).filter(function (p) { return p && p.data; });
-    if (extra.length) groups.push({ title: data.extraPhotoTitle || "기타 현장 사진", photos: extra });
-    if (groups.length) {
+    if (extra.length) {
       sec("현장 사진", true);
-      var num = 0;
-      var cell = function (p) {
-        if (!p) return '<div><div class="cellp"><div class="pic"></div><div class="cap">&nbsp;</div></div></div>';
-        num += 1;
-        return '<div><div class="cellp"><div class="pic"><img src="' + p.data + '" alt=""></div><div class="cap">사진 ' + num + ". " + esc(p.caption || "") + "</div></div></div>";
-      };
-      var i = 0;
-      while (i < groups.length) {
-        var g = groups[i], nx = groups[i + 1];
-        if (g.photos.length === 1 && nx && nx.photos.length === 1) {
-          h.push('<div class="blk"><div class="row2"><div class="band">' + esc(g.title) + '</div><div class="band">' + esc(nx.title) + "</div></div>" +
-            '<div class="row2">' + cell(g.photos[0]) + cell(nx.photos[0]) + "</div></div>");
-          i += 2; continue;
-        }
-        for (var k = 0; k < g.photos.length; k += 2) {
-          // 제목줄은 첫 줄 사진과 한 덩어리로 묶어 페이지 끝에 혼자 남지 않게
-          h.push('<div class="blk">' + (k === 0 ? '<div class="band">' + esc(g.title) + "</div>" : "") +
-            '<div class="row2">' + cell(g.photos[k]) + cell(g.photos[k + 1]) + "</div></div>");
-        }
-        i += 1;
-      }
+      h.push('<div class="blk"><div class="band">' + esc(data.extraPhotoTitle || "기타 현장 사진") + '</div><div class="row2">' + cell(extra[0]) + cell(extra[1]) + "</div></div>" + photoRows(extra.slice(2)));
     }
 
     return { html: '<div class="rp">' + h.join("") + "</div>", css: CSS, title: R.fileName(data).replace(/\.docx$/, "") };
