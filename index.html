@@ -58,7 +58,7 @@
   .ph{position:relative;background:#fff;border:1px solid var(--line);border-radius:10px;overflow:hidden}
   .ph img{display:block;width:100%;aspect-ratio:4/3;object-fit:cover;background:#EEF1F6}
   .ph.wide{grid-column:1/-1}.ph.wide img{aspect-ratio:auto;max-height:340px;object-fit:contain}
-  .ph input{border:0;border-top:1px solid var(--line);border-radius:0;font-size:14px;padding:8px 9px;background:#fff}
+  .ph input{border:0;border-top:1px solid var(--line);border-radius:0;font-size:16px;padding:8px 9px;background:#fff}
   .ph .x{position:absolute;top:6px;right:6px;width:28px;height:28px;border-radius:50%;border:0;background:rgba(0,0,0,.55);color:#fff;font-size:16px;line-height:28px;padding:0}
   .ph .no{position:absolute;top:6px;left:6px;background:rgba(75,42,134,.88);color:#fff;font-size:11px;border-radius:6px;padding:2px 6px}
   #map{width:100%;height:240px;border-radius:12px;border:1px solid var(--line);background:#EEF1F6;display:none;margin:4px 0 10px}
@@ -69,7 +69,7 @@
   .results button small{display:block;color:var(--sub);font-size:12px;margin-top:2px}
   .tag{display:inline-block;font-size:11px;font-weight:600;border-radius:6px;padding:2px 7px;background:var(--light);color:var(--navy)}
   .tag.warn{background:#FDECEC;color:var(--red)}
-  .bar{position:fixed;left:0;right:0;bottom:0;z-index:30;background:rgba(255,255,255,.96);backdrop-filter:blur(8px);
+  .bar{position:fixed;left:0;right:0;bottom:0;z-index:30;background:rgba(255,255,255,.96);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
     border-top:1px solid #E1E6EF;padding:10px 12px calc(env(safe-area-inset-bottom) + 10px);display:flex;gap:8px;align-items:center}
   .bar .btn{padding:12px 12px}
   .bar .primary{flex:1;font-size:16px}
@@ -255,14 +255,14 @@ function chipSet(all,sel,kind){ return all.map(function(x){ return '<button type
 function toggleIn(all,sel,x){ var on=sel.indexOf(x)>=0; return all.filter(function(y){ return y===x ? !on : sel.indexOf(y)>=0; }); }
 
 /* ===================== 사진 처리 ===================== */
+/* 사진 읽기: <img>는 안드로이드 크롬·아이폰 사파리 모두 촬영 방향(EXIF)을 반영해서 그려줌 */
 function loadBitmap(file){
-  if(window.createImageBitmap){
-    return createImageBitmap(file,{imageOrientation:"from-image"}).catch(function(){ return createImageBitmap(file); }).catch(function(){ return viaImg(file); });
-  }
-  return viaImg(file);
-}
-function viaImg(file){
-  return new Promise(function(res,rej){ var u=URL.createObjectURL(file), im=new Image(); im.onload=function(){res(im);}; im.onerror=rej; im.src=u; });
+  return new Promise(function(res,rej){
+    var u=URL.createObjectURL(file), im=new Image();
+    im.onload=function(){ URL.revokeObjectURL(u); res({img:im,width:im.naturalWidth,height:im.naturalHeight}); };
+    im.onerror=function(){ URL.revokeObjectURL(u); rej(new Error("이미지를 읽을 수 없음")); };
+    im.src=u;
+  });
 }
 // mode "photo": 가로 → 4:3으로 가운데 자르기(1200×900), 세로 → 원본 비율 유지(긴 변 1200)
 // mode "full": 원본 비율 유지(긴 변 1800)
@@ -277,8 +277,7 @@ function processImage(file,mode){
     }
     var c=document.createElement("canvas"); c.width=ow; c.height=oh;
     var x=c.getContext("2d"); x.fillStyle="#fff"; x.fillRect(0,0,ow,oh);
-    x.drawImage(bm,sx,sy,sw,sh,0,0,ow,oh);
-    if(bm.close) bm.close();
+    x.drawImage(bm.img,sx,sy,sw,sh,0,0,ow,oh);
     return {data:c.toDataURL("image/jpeg",0.85),w:ow,h:oh,caption:""};
   });
 }
@@ -472,6 +471,8 @@ $("#btnEm").addEventListener("click",function(){
 
 /* ===================== 지도 (카카오) ===================== */
 var MAP=null, MARKER=null, KAKAO=null, kakaoTried=false;
+/* Claude 앱 안에서 열린 페이지인지 (외부 지도 스크립트·위치·주소검색 창이 막힘) */
+var IN_CLAUDE=false; try{ IN_CLAUDE=!!(window.claude&&typeof window.claude.use==="function"); }catch(e){ IN_CLAUDE=false; }
 function loadScript(src){ return new Promise(function(res,rej){ var s=document.createElement("script"); s.src=src; s.onload=res; s.onerror=rej; document.head.appendChild(s); }); }
 function loadKakao(){
   if(KAKAO) return Promise.resolve(KAKAO);
@@ -483,6 +484,11 @@ function loadKakao(){
 function mapNote(msg){ var n=$("#mapNote"); if(n) n.innerHTML=msg||""; }
 function bindPlace(){
   var q=$("#q"); if(!q) return;
+  if(IN_CLAUDE){
+    $$("#q, #btnFind, #btnPost, #btnHere").forEach(function(el){ var box=el.closest("label.f")||el.closest(".row"); if(box) box.classList.add("hidden"); });
+    mapNote('Claude 앱 안에서는 지도와 주소 검색이 열리지 않아요. 장소명과 주소를 직접 적으면 위 버튼으로 카카오맵·T맵을 열 수 있어요.');
+    return;
+  }
   $("#btnFind").onclick=function(){ findPlace(q.value); };
   q.onkeydown=function(e){ if(e.key==="Enter"){ e.preventDefault(); findPlace(q.value);} };
   $("#btnPost").onclick=openPostcode;
@@ -609,20 +615,33 @@ function makeDoc(){
     $("#btnMake").disabled=false; console.error(err); toast("만들기 실패: "+(err&&err.message||err),4000); return null;
   });
 }
-function download(file){
-  var u=URL.createObjectURL(file), a=document.createElement("a");
-  a.href=u; a.download=file.name; document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(function(){URL.revokeObjectURL(u);},4000);
+/* Claude 앱 안에서 열린 경우: 앱의 파일 저장 기능 사용 (일반 다운로드가 막혀 있음) */
+var DL=null;
+try{ if(window.claude&&typeof window.claude.use==="function") window.claude.use("downloads").then(function(d){ DL=d||null; },function(){ DL=null; }); }catch(e){ DL=null; }
+function download(file,okMsg){
+  if(DL){
+    return DL.save({filename:file.name,data:file}).then(function(){ toast(okMsg||"저장했어요",3000); },function(err){
+      var c=err&&err.code;
+      toast(c==="declined"?"저장을 취소했어요":"저장하지 못했어요 ("+(c||"오류")+")",3000);
+    });
+  }
+  try{
+    var u=URL.createObjectURL(file), a=document.createElement("a");
+    a.href=u; a.download=file.name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){URL.revokeObjectURL(u);},4000);
+    toast(okMsg||"저장했어요",3500);
+  }catch(e){ toast("저장하지 못했어요: "+e.message,3500); }
+  return Promise.resolve();
 }
 $("#btnMake").addEventListener("click",function(){
-  makeDoc().then(function(f){ if(f){ download(f); toast("다운로드 폴더에 저장했어요 · "+f.name,3500); } });
+  makeDoc().then(function(f){ if(f) download(f,"저장했어요 · "+f.name); });
 });
 $("#btnShare").addEventListener("click",function(){
   makeDoc().then(function(f){
     if(!f) return;
-    if(navigator.canShare&&navigator.canShare({files:[f]})){
-      navigator.share({files:[f],title:f.name}).catch(function(){});
-    } else { download(f); toast("이 브라우저는 바로 보내기를 지원하지 않아 다운로드했어요",3500); }
+    var can=false; try{ can=!DL&&navigator.canShare&&navigator.canShare({files:[f]}); }catch(e){ can=false; }
+    if(can){ navigator.share({files:[f],title:f.name}).catch(function(){}); }
+    else { download(f,"저장했어요 · 저장된 파일을 카톡 등으로 보내세요"); }
   });
 });
 
@@ -634,7 +653,7 @@ $$("#dlgMenu [data-act]").forEach(function(b){ b.onclick=function(){
   if(a==="new") ask("새 보고서를 시작할까요?","지금 작성 중인 내용과 사진이 모두 지워집니다. 필요하면 먼저 <b>백업 파일로 저장</b>하세요.","새로 시작").then(function(ok){ if(ok){ S=blank(); openState={}; render(); scheduleSave(); window.scrollTo(0,0);} });
   if(a==="export"){
     var d=exportData(), name=(ReportEngine.fileName(d)).replace(/\.docx$/,".json");
-    download(new File([JSON.stringify(d)],name,{type:"application/json"})); toast("백업 파일을 저장했어요");
+    download(new File([JSON.stringify(d)],name,{type:"application/json"}),"백업 파일을 저장했어요");
   }
   if(a==="import") $("#fileImport").click();
   if(a==="settings"){ var s=settings(); $("#setKey").value=s.kakaoKey||""; $("#setCompany").value=s.company||""; $("#setMembers").value=s.members||""; $("#dlgSet").showModal(); }
