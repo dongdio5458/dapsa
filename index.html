@@ -72,11 +72,35 @@
   .bar{position:fixed;left:0;right:0;bottom:0;z-index:30;background:rgba(255,255,255,.96);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
     border-top:1px solid #E1E6EF;padding:10px 12px calc(env(safe-area-inset-bottom) + 10px);display:flex;gap:8px;align-items:center}
   .bar .btn{padding:12px 12px}
-  .bar .primary{flex:1;font-size:16px}
+  .bar .primary{flex:1;font-size:16px;padding-left:6px;padding-right:6px}
+  .bar #saved{max-width:58px;white-space:normal;line-height:1.2;text-align:center}
   #status{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom) + 76px);z-index:40;
     background:#1B2433;color:#fff;font-size:14px;padding:10px 16px;border-radius:999px;opacity:0;transition:opacity .25s;pointer-events:none;max-width:90vw;text-align:center}
   #status.show{opacity:1}
   #saved{font-size:11px;color:var(--sub);white-space:nowrap}
+  #printView{position:fixed;inset:0;z-index:50;background:#E9E6EF;overflow:auto;-webkit-overflow-scrolling:touch}
+  .pv-bar{position:sticky;top:0;z-index:2;display:flex;gap:8px;align-items:center;background:var(--navy);padding:calc(env(safe-area-inset-top) + 10px) 12px 10px}
+  .pv-bar .btn{padding:10px 12px}
+  .pv-bar .sp{flex:1}
+  .pv-help{margin:12px;background:#fff;border-radius:12px;padding:12px 14px;font-size:14px;line-height:1.55;color:var(--text);border:1px solid #E3DDF0}
+  .pv-help b{color:var(--navy)}
+  #pvDoc{margin:0 12px 40px;background:#fff;padding:14px 12px;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.12)}
+  @media screen{
+    #pvDoc .rp{width:auto;max-width:170mm}
+    #pvDoc .rp .cover table{width:100%;max-width:325pt}
+    #pvDoc .rp .cover .csub{margin-bottom:40pt}
+  }
+  body.pv-open{overflow:hidden}
+  @media print{
+    html,body{background:#fff!important}
+    body.pv-open>*:not(#printView){display:none!important}
+    #printView{position:static;overflow:visible;background:#fff}
+    .pv-bar,.pv-help{display:none!important}
+    #pvDoc{margin:0;padding:0;box-shadow:none;border-radius:0}
+    #pvDoc .rp{width:170mm;max-width:none}
+  }
+  #inapp .two{display:flex;gap:8px}
+  #inapp .two .btn{flex:1}
   #inapp{background:#FFF4D6;border-bottom:1px solid #F0D58C;padding:12px 14px;font-size:14px;line-height:1.5;color:#5A4300}
   #inapp b{color:#3D2E00}
   #inapp .btn{margin-top:8px;width:100%;background:#4B2A86;border-color:#4B2A86;color:#fff}
@@ -103,10 +127,16 @@
 <div class="bar">
   <button class="btn" id="btnEm" type="button" title="선택한 글자를 빨간 굵은 글씨로">강조</button>
   <span id="saved"></span>
-  <button class="btn primary" id="btnMake" type="button">워드 만들기</button>
-  <button class="btn" id="btnShare" type="button">보내기</button>
+  <button class="btn primary" id="btnMake" type="button">워드 파일</button>
+  <button class="btn primary" id="btnPdf" type="button">PDF 파일</button>
 </div>
 <div id="status"></div>
+<div id="printView" class="hidden">
+  <div class="pv-bar"><button class="btn" id="pvClose" type="button">← 돌아가기</button><span class="sp"></span>
+    <button class="btn" id="pvPrint" type="button" style="background:#fff;color:var(--navy)">PDF로 저장</button></div>
+  <div class="pv-help" id="pvHelp"></div>
+  <div id="pvDoc"></div>
+</div>
 
 <dialog id="dlgMenu">
   <div class="dh"><span>메뉴</span><button class="btn sm" data-close>닫기</button></div>
@@ -131,6 +161,14 @@
   <div class="df"><button class="btn" data-close>취소</button><button class="btn primary" id="setSave">저장</button></div>
 </dialog>
 
+<dialog id="dlgFile">
+  <div class="dh"><span>워드 파일이 준비됐어요</span></div>
+  <div class="db"><p class="note" id="fileName" style="margin:0 0 12px;word-break:break-all"></p>
+    <button class="btn primary" id="fileShare" type="button" style="width:100%;margin-bottom:8px">카톡으로 보내기 · 파일에 저장</button>
+    <button class="btn" id="fileDown" type="button" style="width:100%">폰에 다운로드</button></div>
+  <div class="df"><button class="btn" data-close>닫기</button></div>
+</dialog>
+
 <dialog id="dlgAsk">
   <div class="dh"><span id="askTitle">확인</span></div>
   <div class="db" id="askBody"></div>
@@ -141,6 +179,7 @@
 
 <script src="vendor/docx.iife.js"></script>
 <script src="report.js"></script>
+<script src="print.js"></script>
 <script>
 (function(){
 "use strict";
@@ -601,24 +640,28 @@ function exportData(){
   return d;
 }
 function makeDoc(){
-  if(IN_APP){
-    ask("이 화면에서는 저장이 안 돼요",(IS_KAKAO?"카카오톡":"앱")+" 안의 브라우저는 워드 파일 저장을 지원하지 않아요. <b>"+BR_RO+" 열기</b>를 누르면 작성한 내용 없이 새로 열리니, 처음부터 "+BR+"에서 작성해 주세요.",BR_RO+" 열기")
-      .then(function(ok){ if(ok) openExternal(); });
-    return Promise.resolve(null);
-  }
+  if(IN_APP){ inAppAsk(); return Promise.resolve(null); }
+  if(!checkRequired()) return Promise.resolve(null);
+  if(!window.docx||!window.ReportEngine){ toast("변환 엔진을 불러오지 못했어요. 새로고침 해주세요",3500); return Promise.resolve(null); }
+  return buildDocFile();
+}
+/* 답사일·장소명이 비었으면 창으로 알려주고 그 칸으로 이동. 통과하면 true */
+function checkRequired(){
   var miss=[];
   if(!S.surveyDate) miss.push("답사일");
   if(!filled(S.place.name)) miss.push("장소명");
   if(miss.length){
     var where={"답사일":["basic","surveyDate"],"장소명":["place","place.name"]}[miss[0]];
-    ask("먼저 입력해 주세요","워드를 만들려면 <b>"+miss.join(", ")+"</b> 칸을 채워야 해요.","입력하러 가기").then(function(ok){
+    ask("먼저 입력해 주세요","보고서를 만들려면 <b>"+miss.join(", ")+"</b> 칸을 채워야 해요.","입력하러 가기").then(function(ok){
       if(!ok) return;
       openState[where[0]]=true; render();
       var el=$('[data-k="'+where[1]+'"]'); if(el){ el.scrollIntoView({block:"center"}); el.focus(); }
     });
-    return Promise.resolve(null);
+    return false;
   }
-  if(!window.docx||!window.ReportEngine){ toast("변환 엔진을 불러오지 못했어요. 새로고침 해주세요",3500); return Promise.resolve(null); }
+  return true;
+}
+function buildDocFile(){
   $("#btnMake").disabled=true; toast("워드 파일 만드는 중…",10000);
   var data=exportData();
   return Promise.resolve().then(function(){
@@ -651,16 +694,65 @@ function download(file,okMsg){
   return Promise.resolve();
 }
 $("#btnMake").addEventListener("click",function(){
-  makeDoc().then(function(f){ if(f) download(f,"저장했어요 · "+f.name); });
-});
-$("#btnShare").addEventListener("click",function(){
   makeDoc().then(function(f){
     if(!f) return;
-    var can=false; try{ can=!DL&&navigator.canShare&&navigator.canShare({files:[f]}); }catch(e){ can=false; }
-    if(can){ navigator.share({files:[f],title:f.name}).catch(function(){}); }
-    else { download(f,"저장했어요 · 저장된 파일을 카톡 등으로 보내세요"); }
+    var can=false; try{ can=IS_MOBILE&&!DL&&navigator.canShare&&navigator.canShare({files:[f]}); }catch(e){ can=false; }
+    if(!can){ download(f,"저장했어요 · "+f.name); return; }
+    // 휴대폰: 파일이 다 만들어진 뒤 한 번 더 눌러서 공유창을 염
+    // (아이폰은 버튼을 누른 직후가 아니면 공유창을 막기 때문)
+    toast("준비됐어요",800);
+    $("#fileName").textContent=f.name;
+    $("#fileShare").onclick=function(){
+      $("#dlgFile").close();
+      try{
+        navigator.share({files:[f],title:f.name}).catch(function(err){
+          if(err&&err.name==="AbortError") return;
+          download(f,"공유가 안 돼서 다운로드했어요");
+        });
+      }catch(e){ download(f,"공유가 안 돼서 다운로드했어요"); }
+    };
+    $("#fileDown").onclick=function(){ $("#dlgFile").close(); download(f,"저장했어요 · "+f.name); };
+    $("#dlgFile").showModal();
   });
 });
+
+/* ===================== PDF 파일 (폰의 인쇄 → PDF로 저장) ===================== */
+var pvTitle=null, oldTitle=document.title;
+function pdfHelp(){
+  if(IS_IOS) return '<b>아이폰·아이패드</b>: 위 <b>[PDF로 저장]</b> → 인쇄 화면 맨 위의 <b>공유 버튼(□↑)</b> → <b>파일에 저장</b> 또는 <b>카카오톡</b>을 고르세요.<br>공유 버튼이 안 보이면 아래 미리보기를 두 손가락으로 벌려 크게 연 뒤 공유 버튼을 누르세요.';
+  if(/Android/i.test(UA)) return '<b>갤럭시(안드로이드)</b>: 위 <b>[PDF로 저장]</b> → 맨 위 프린터 선택에서 <b>PDF로 저장</b>을 고르고 → <b>PDF 버튼(다운로드)</b>을 누르세요. 내 파일 → 다운로드 폴더에 저장돼요.';
+  return '위 <b>[PDF로 저장]</b> → 인쇄 창에서 대상(프린터)을 <b>PDF로 저장</b>으로 고르고 <b>저장</b>을 누르세요.';
+}
+function openPdfView(){
+  if(IN_APP){ inAppAsk(); return; }
+  if(IN_CLAUDE){ toast("Claude 앱 안에서는 PDF를 만들 수 없어요. 팀 주소(크롬·사파리)에서 만들어 주세요",3500); return; }
+  if(!checkRequired()) return;
+  var r;
+  try{ r=ReportPrint.build(exportData()); }catch(e){ toast("PDF 화면을 만들지 못했어요: "+e.message,3500); return; }
+  var st=$("#pvStyle"); if(!st){ st=document.createElement("style"); st.id="pvStyle"; document.head.appendChild(st); }
+  st.textContent=r.css;
+  $("#pvDoc").innerHTML=r.html;
+  $("#pvHelp").innerHTML=pdfHelp();
+  pvTitle=r.title;
+  $("#printView").classList.remove("hidden"); document.body.classList.add("pv-open");
+  $("#printView").scrollTop=0;
+}
+function closePdfView(){
+  $("#printView").classList.add("hidden"); document.body.classList.remove("pv-open");
+  $("#pvDoc").innerHTML=""; document.title=oldTitle;
+}
+$("#btnPdf").addEventListener("click",openPdfView);
+$("#pvClose").addEventListener("click",closePdfView);
+$("#pvPrint").addEventListener("click",function(){
+  // 저장되는 PDF 파일 이름 = 문서 제목
+  if(pvTitle) document.title=pvTitle;
+  var imgs=$$("#pvDoc img").filter(function(i){ return !i.complete; });
+  var go=function(){ try{ window.print(); }catch(e){ toast("인쇄 기능을 열 수 없어요: "+e.message,3500); } };
+  if(!imgs.length) return go();
+  toast("사진 준비 중…",3000);
+  Promise.all(imgs.map(function(i){ return new Promise(function(res){ i.onload=i.onerror=res; }); })).then(go);
+});
+window.addEventListener("afterprint",function(){ document.title=oldTitle; });
 
 /* ===================== 메뉴 ===================== */
 $$("[data-close]").forEach(function(b){ b.onclick=function(){ b.closest("dialog").close(); }; });
@@ -698,8 +790,19 @@ document.addEventListener("click",function(e){ var r=$("#results"); if(r&&!e.tar
 var UA=navigator.userAgent||"";
 var IS_IOS=/iPhone|iPad|iPod/i.test(UA)||(/Macintosh/.test(UA)&&navigator.maxTouchPoints>1);
 var IS_KAKAO=/KAKAOTALK/i.test(UA);
-var BR=IS_IOS?"사파리":"크롬", BR_RO=IS_IOS?"사파리로":"크롬으로";
 var IN_APP=!IN_CLAUDE&&(IS_KAKAO||/NAVER\(inapp|; wv\)|Instagram|FBAN|FBAV|Line\/|DaumApps|everytimeApp|BAND\//i.test(UA));
+var IS_MOBILE=IS_IOS||/Android/i.test(UA);
+/* 아이폰에서 크롬 앱으로 열기 (크롬이 없으면 반응이 없으니 안내) */
+function openChrome(){
+  var url=location.href.split("#")[0];
+  if(!IS_IOS){ openExternal(); return; }
+  location.href="googlechromes://"+url.replace(/^https?:\/\//,"");
+  setTimeout(function(){ if(!document.hidden) toast("크롬이 없으면 [사파리로 열기]를 눌러 주세요",3500); },1600);
+}
+function inAppAsk(){
+  ask("이 화면에서는 저장이 안 돼요",(IS_KAKAO?"카카오톡":"앱")+" 안의 브라우저는 워드·PDF 저장을 지원하지 않아요. <b>"+(IS_IOS?"크롬(또는 사파리)":"크롬")+"으로 열기</b>를 누르면 작성한 내용 없이 새로 열리니, 처음부터 그쪽에서 작성해 주세요.","크롬으로 열기")
+    .then(function(ok){ if(ok) openChrome(); });
+}
 function openExternal(){
   var url=location.href.split("#")[0];
   if(IS_KAKAO){ location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(url); return; }
@@ -708,10 +811,12 @@ function openExternal(){
 }
 if(IN_APP){
   var bx=$("#inapp"), app=IS_KAKAO?"카카오톡":"앱";
-  bx.innerHTML="<b>"+app+" 안에서 열려 있어요.</b><br>여기서는 워드 파일 저장이 안 돼요(‘지원하지 않는 형식’). "+BR_RO+" 열어서 써 주세요."+
-    '<button type="button" class="btn" id="btnExt">'+BR_RO+" 열기</button>";
+  bx.innerHTML="<b>"+app+" 안에서 열려 있어요.</b><br>여기서는 워드·PDF 저장이 안 돼요(‘지원하지 않는 형식’). "+(IS_IOS?"크롬이나 사파리로":"크롬으로")+" 열어서 써 주세요."+
+    (IS_IOS?'<div class="two"><button type="button" class="btn" id="btnChrome">크롬으로 열기</button><button type="button" class="btn" id="btnExt">사파리로 열기</button></div>'
+           :'<button type="button" class="btn" id="btnExt">크롬으로 열기</button>');
   bx.classList.remove("hidden");
   $("#btnExt").onclick=openExternal;
+  if($("#btnChrome")) $("#btnChrome").onclick=openChrome;
 }
 
 /* ===================== 시작 ===================== */
