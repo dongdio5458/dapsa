@@ -179,10 +179,11 @@
 
 <input type="file" id="fileImport" accept=".json,application/json" class="hidden">
 
-<script src="config.js"></script>
+<!-- ?v= 는 APP_VERSION과 같게: 폰이 예전 파일을 쓰지 않고 바로 새 파일을 받게 함 -->
+<script src="config.js?v=2026.11.23-9"></script>
 <script src="vendor/docx.iife.js"></script>
-<script src="report.js"></script>
-<script src="print.js"></script>
+<script src="report.js?v=2026.11.23-9"></script>
+<script src="print.js?v=2026.11.23-9"></script>
 <script>
 (function(){
 "use strict";
@@ -200,7 +201,7 @@ var TECH = [
   ["기타", "예: 식사 제공 안 됨\n송출 립싱크(딜레이) 확인용 클립 필요"]
 ];
 /* 화면에 보이는 버전 — 폰이 최신 파일을 받았는지 확인용 (올릴 때마다 올림) */
-var APP_VERSION="2026.11.23-8";
+var APP_VERSION="2026.11.23-9";
 var FORMS = ["생방송","녹화","SNG"];
 var NETS = ["KT망","LG망","MNG망"];
 var TIMES = ["오전","오후","종일"];
