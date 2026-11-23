@@ -187,6 +187,7 @@
 
 /* ===================== 기본값 ===================== */
 var TECH = [
+  ["카메라 대수", "예: 총 8대 (STD 2 + EFP 6, 지미집 포함)\n짐벌 1대 별도"],
   ["일정·집합", "예: 9/13(일) 사전설치, 현장 12시 집합\n시화문 집합, **신분증 필히 지참**, 비표 교체 후 장비 검수"],
   ["중계차·포설", "예: 중계차와 현장 거리 100m 이내\n본선 또는 드럼 사용 판단 후 포설, 가이드 10장 정도"],
   ["송출", "예: **KT 망체크 (주-예비-리턴 + 4SR)**\n주조 연락처 044-204-8402"],
@@ -212,8 +213,8 @@ function saveSettings(s){ try{ localStorage.setItem("dapsa.settings", JSON.strin
 function blank(){
   var s=settings();
   return {
-    v:1, company:s.company||"MBC씨앤아이", title:"", surveyDate:todayStr(), surveyTime:"오전", reportDate:"",
-    program:"", broadcastStart:"", broadcastEnd:"", purpose:"", broadcastTypes:[], broadcastExtra:"", networks:[],
+    v:2, company:s.company||"MBC씨앤아이", title:"", surveyDate:todayStr(), surveyTime:"오전", reportDate:"",
+    program:"", broadcastStart:"", broadcastEnd:"", purpose:"", broadcastTypes:[], networks:[],
     members:s.members||"", partners:"",
     place:{name:"",address:"",lat:null,lng:null},
     contacts:[{org:"",name:"",title:"",phone:"",email:""}],
@@ -227,6 +228,7 @@ function newCand(){ return {name:"",planned:false,location:"",pros:"",cons:"",ph
 function normalize(d){
   var base=blank();
   d=(d&&typeof d==="object")?d:{};
+  var ver=Number(d.v)||1; // 기본값을 채우기 전의 저장본 버전
   Object.keys(base).forEach(function(k){ if(d[k]===undefined||d[k]===null) d[k]=base[k]; });
   d.place=Object.assign(base.place,d.place||{});
   ["contacts","candidates","tech","diagrams","extraPhotos"].forEach(function(k){ if(!Array.isArray(d[k])) d[k]=base[k]; });
@@ -240,6 +242,14 @@ function normalize(d){
     d.broadcastExtra=cut>=0?bf.slice(cut+3).trim():(d.broadcastTypes.length||d.networks.length?"":bf);
   }
   delete d.broadcastForm;
+  // v2(2026-11-23): 기술 검토에 '카메라 대수' 칸 추가, 중계 형태의 '장비·인원' 칸은 없애고 내용은 카메라 대수로 옮김
+  if(ver<2){
+    var cam=d.tech.filter(function(t){ return t&&t.category==="카메라 대수"; })[0];
+    if(!cam){ cam={category:"카메라 대수",items:""}; d.tech.unshift(cam); }
+    if(filled(d.broadcastExtra)){ cam.items=filled(cam.items)?cam.items+"\n"+d.broadcastExtra:d.broadcastExtra; }
+    d.broadcastExtra="";
+    d.v=2;
+  }
   return d;
 }
 
@@ -370,8 +380,7 @@ function render(){
   b+=field("프로그램명", inp("program","예: MBC 뉴스데스크"));
   b+=field("방송일", '<div class="row">'+inp("broadcastStart","","date")+inp("broadcastEnd","","date")+'</div>', "하루면 앞 칸만");
   b+=field("목적", inp("purpose","예: 현장중계 위치 선정 및 현장 여건 확인"));
-  b+=field("중계 형태", '<div class="chips" style="margin:0 0 8px">'+chipSet(FORMS,S.broadcastTypes,"type")+'</div>'+
-      inp("broadcastExtra","장비·인원 예: 카메라 3대 / 현장 기자 1명"), "여러 개 선택 가능");
+  b+=field("중계 형태", '<div class="chips" style="margin:0">'+chipSet(FORMS,S.broadcastTypes,"type")+'</div>', "여러 개 선택 가능");
   b+=field("사용 망", '<div class="chips" style="margin:0">'+chipSet(NETS,S.networks,"net")+'</div>', "여러 개 선택 가능");
   b+=field("작성일", inp("reportDate","","date"), "비워두면 답사일");
   h+=card("basic",1,"기본 정보", S.surveyDate?ReportEngine.korDate(S.surveyDate):"", b, filled(S.surveyDate));
