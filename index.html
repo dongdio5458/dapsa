@@ -4,9 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#4B2A86">
+<meta name="color-scheme" content="only light">
 <title>답사보고서 작성</title>
 <style>
   :root{
+    color-scheme:only light;
     --navy:#4B2A86; --navy2:#6A44B0; --light:#EFE9F8; --line:#DCD4EA; --red:#C00000;
     --bg:#F6F3FA; --text:#1B1F27; --sub:#5B6475; --card:#fff; --radius:14px;
   }
@@ -78,7 +80,8 @@
     background:#1B2433;color:#fff;font-size:14px;padding:10px 16px;border-radius:999px;opacity:0;transition:opacity .25s;pointer-events:none;max-width:90vw;text-align:center}
   #status.show{opacity:1}
   #saved{font-size:11px;color:var(--sub);white-space:nowrap}
-  #printView{position:fixed;inset:0;z-index:50;background:#E9E6EF;overflow:auto;-webkit-overflow-scrolling:touch}
+  #printView{background:#E9E6EF;min-height:100vh}
+  body.pv-open>header,body.pv-open>main,body.pv-open>.bar,body.pv-open>#inapp{display:none!important}
   .pv-bar{position:sticky;top:0;z-index:2;display:flex;gap:8px;align-items:center;background:var(--navy);padding:calc(env(safe-area-inset-top) + 10px) 12px 10px}
   .pv-bar .btn{padding:10px 12px}
   .pv-bar .sp{flex:1}
@@ -90,11 +93,10 @@
     #pvDoc .rp .cover table{width:100%;max-width:325pt}
     #pvDoc .rp .cover .csub{margin-bottom:40pt}
   }
-  body.pv-open{overflow:hidden}
   @media print{
     html,body{background:#fff!important}
     body.pv-open>*:not(#printView){display:none!important}
-    #printView{position:static;overflow:visible;background:#fff}
+    #printView{background:#fff;min-height:0}
     .pv-bar,.pv-help{display:none!important}
     #pvDoc{margin:0;padding:0;box-shadow:none;border-radius:0}
     #pvDoc .rp{width:170mm;max-width:none}
@@ -735,7 +737,7 @@ $("#btnMake").addEventListener("click",function(){
 });
 
 /* ===================== PDF 파일 (폰의 인쇄 → PDF로 저장) ===================== */
-var pvTitle=null, oldTitle=document.title;
+var pvTitle=null, oldTitle=document.title, pvScroll=0;
 function pdfHelp(){
   if(IS_IOS) return '<b>아이폰·아이패드</b>: 위 <b>[PDF로 저장]</b> → 인쇄 화면 맨 위의 <b>공유 버튼(□↑)</b> → <b>파일에 저장</b> 또는 <b>카카오톡</b>을 고르세요.<br>공유 버튼이 안 보이면 아래 미리보기를 두 손가락으로 벌려 크게 연 뒤 공유 버튼을 누르세요.';
   if(/Android/i.test(UA)) return '<b>갤럭시(안드로이드)</b>: 위 <b>[PDF로 저장]</b> → 맨 위 프린터 선택에서 <b>PDF로 저장</b>을 고르고 → <b>PDF 버튼(다운로드)</b>을 누르세요. 내 파일 → 다운로드 폴더에 저장돼요.';
@@ -752,12 +754,14 @@ function openPdfView(){
   $("#pvDoc").innerHTML=r.html;
   $("#pvHelp").innerHTML=pdfHelp();
   pvTitle=r.title;
+  pvScroll=window.scrollY||0;
   $("#printView").classList.remove("hidden"); document.body.classList.add("pv-open");
-  $("#printView").scrollTop=0;
+  window.scrollTo(0,0);
 }
 function closePdfView(){
   $("#printView").classList.add("hidden"); document.body.classList.remove("pv-open");
   $("#pvDoc").innerHTML=""; document.title=oldTitle;
+  window.scrollTo(0,pvScroll);
 }
 $("#btnPdf").addEventListener("click",openPdfView);
 $("#pvClose").addEventListener("click",closePdfView);
@@ -765,7 +769,7 @@ $("#pvPrint").addEventListener("click",function(){
   // 저장되는 PDF 파일 이름 = 문서 제목
   if(pvTitle) document.title=pvTitle;
   var imgs=$$("#pvDoc img").filter(function(i){ return !i.complete; });
-  var go=function(){ try{ window.print(); }catch(e){ toast("인쇄 기능을 열 수 없어요: "+e.message,3500); } };
+  var go=function(){ window.scrollTo(0,0); try{ window.print(); }catch(e){ toast("인쇄 기능을 열 수 없어요: "+e.message,3500); } };
   if(!imgs.length) return go();
   toast("사진 준비 중…",3000);
   Promise.all(imgs.map(function(i){ return new Promise(function(res){ i.onload=i.onerror=res; }); })).then(go);
