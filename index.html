@@ -77,6 +77,9 @@
     background:#1B2433;color:#fff;font-size:14px;padding:10px 16px;border-radius:999px;opacity:0;transition:opacity .25s;pointer-events:none;max-width:90vw;text-align:center}
   #status.show{opacity:1}
   #saved{font-size:11px;color:var(--sub);white-space:nowrap}
+  #inapp{background:#FFF4D6;border-bottom:1px solid #F0D58C;padding:12px 14px;font-size:14px;line-height:1.5;color:#5A4300}
+  #inapp b{color:#3D2E00}
+  #inapp .btn{margin-top:8px;width:100%;background:#4B2A86;border-color:#4B2A86;color:#fff}
   dialog{border:0;border-radius:16px;padding:0;width:min(92vw,520px);box-shadow:0 20px 60px rgba(0,0,0,.25)}
   dialog::backdrop{background:rgba(10,20,40,.45)}
   dialog .dh{padding:16px 18px;font-weight:700;border-bottom:1px solid #EEF1F6;display:flex}
@@ -94,6 +97,7 @@
   <button id="btnMenu" type="button">메뉴</button>
 </header>
 
+<div id="inapp" class="hidden"></div>
 <main id="app"></main>
 
 <div class="bar">
@@ -597,10 +601,23 @@ function exportData(){
   return d;
 }
 function makeDoc(){
+  if(IN_APP){
+    ask("이 화면에서는 저장이 안 돼요",(IS_KAKAO?"카카오톡":"앱")+" 안의 브라우저는 워드 파일 저장을 지원하지 않아요. <b>"+BR_RO+" 열기</b>를 누르면 작성한 내용 없이 새로 열리니, 처음부터 "+BR+"에서 작성해 주세요.",BR_RO+" 열기")
+      .then(function(ok){ if(ok) openExternal(); });
+    return Promise.resolve(null);
+  }
   var miss=[];
   if(!S.surveyDate) miss.push("답사일");
   if(!filled(S.place.name)) miss.push("장소명");
-  if(miss.length){ toast(miss.join(", ")+"을(를) 먼저 입력하세요",3000); return Promise.resolve(null); }
+  if(miss.length){
+    var where={"답사일":["basic","surveyDate"],"장소명":["place","place.name"]}[miss[0]];
+    ask("먼저 입력해 주세요","워드를 만들려면 <b>"+miss.join(", ")+"</b> 칸을 채워야 해요.","입력하러 가기").then(function(ok){
+      if(!ok) return;
+      openState[where[0]]=true; render();
+      var el=$('[data-k="'+where[1]+'"]'); if(el){ el.scrollIntoView({block:"center"}); el.focus(); }
+    });
+    return Promise.resolve(null);
+  }
   if(!window.docx||!window.ReportEngine){ toast("변환 엔진을 불러오지 못했어요. 새로고침 해주세요",3500); return Promise.resolve(null); }
   $("#btnMake").disabled=true; toast("워드 파일 만드는 중…",10000);
   var data=exportData();
@@ -675,6 +692,27 @@ $("#fileImport").onchange=function(){
 
 /* 화면 밖 클릭 시 검색결과 닫기 */
 document.addEventListener("click",function(e){ var r=$("#results"); if(r&&!e.target.closest("#results")&&!e.target.closest("#btnFind")) r.classList.add("hidden"); });
+
+/* ===================== 앱 안 브라우저 안내 ===================== */
+/* 카톡·네이버·인스타 등 앱 안에서 열린 브라우저는 워드 저장·공유를 막음 → 크롬/사파리로 열도록 안내 */
+var UA=navigator.userAgent||"";
+var IS_IOS=/iPhone|iPad|iPod/i.test(UA)||(/Macintosh/.test(UA)&&navigator.maxTouchPoints>1);
+var IS_KAKAO=/KAKAOTALK/i.test(UA);
+var BR=IS_IOS?"사파리":"크롬", BR_RO=IS_IOS?"사파리로":"크롬으로";
+var IN_APP=!IN_CLAUDE&&(IS_KAKAO||/NAVER\(inapp|; wv\)|Instagram|FBAN|FBAV|Line\/|DaumApps|everytimeApp|BAND\//i.test(UA));
+function openExternal(){
+  var url=location.href.split("#")[0];
+  if(IS_KAKAO){ location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(url); return; }
+  if(!IS_IOS){ location.href="intent://"+url.replace(/^https?:\/\//,"")+"#Intent;scheme=https;package=com.android.chrome;end"; return; }
+  toast("오른쪽 아래 ⋯ 또는 공유 버튼 → 'Safari로 열기'를 눌러 주세요",4000);
+}
+if(IN_APP){
+  var bx=$("#inapp"), app=IS_KAKAO?"카카오톡":"앱";
+  bx.innerHTML="<b>"+app+" 안에서 열려 있어요.</b><br>여기서는 워드 파일 저장이 안 돼요(‘지원하지 않는 형식’). "+BR_RO+" 열어서 써 주세요."+
+    '<button type="button" class="btn" id="btnExt">'+BR_RO+" 열기</button>";
+  bx.classList.remove("hidden");
+  $("#btnExt").onclick=openExternal;
+}
 
 /* ===================== 시작 ===================== */
 openDB().then(function(){ return dbGet("draft"); }).then(function(d){
